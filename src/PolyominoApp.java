@@ -25,13 +25,27 @@ DO NOT USE THIS SOFTWARE IF YOU DON'T AGREE WITH STATED CONDITIONS.
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+
+import solver.DLXPolyominoSolver;
+import solver.PolyominoSolver;
 
 /**
  * Swing application to solve and visualize Polyomino tiling.
  *
+ * usage: java -cp classes PolyominoApp [-benchmark]
+ *
+ * if option -benchmark is specified, headless benchmark is executed
+ *
  * v1.0, 31-12-2025: PolyominoApp first release
+ * v1.0.1, 14-01-2026: code refactoring and benchmark
  */
 public class PolyominoApp extends JFrame {
 
@@ -169,6 +183,9 @@ public class PolyominoApp extends JFrame {
      * Entry point for the solver. Launches the background worker and the modal dialog.
      */
     private void startSolving() {
+		if (currentWorker != null && !currentWorker.isDone())
+			currentWorker.cancel(true);
+
         int r = (int) rowsSpinner.getValue();
         int c = (int) colsSpinner.getValue();
         
@@ -189,7 +206,7 @@ public class PolyominoApp extends JFrame {
 		int totalArea = r * c;
         if (!summable(totalArea, uniqueSizes)) {
             JOptionPane.showMessageDialog(this, 
-                "Given selected piece sizes " + uniqueSizes.toString() + " it is not possible to cover board area " + totalArea,
+                "Given selected piece sizes " + uniqueSizes + " it is not possible to cover board area " + totalArea,
                 "Impossible Configuration",
                 JOptionPane.ERROR_MESSAGE);
             return;
@@ -224,7 +241,7 @@ public class PolyominoApp extends JFrame {
     private static boolean summable(int targetSum, Set<Integer> Sizes) {
         final boolean[] dp = new boolean[targetSum + 1];
         dp[0] = true;
-        for (int Sj : Sizes) {
+        for (int Sj: Sizes) {
             for (int i = Sj; i <= targetSum; i++)
                 if (dp[i - Sj])
                     dp[i] = true;
@@ -242,7 +259,7 @@ public class PolyominoApp extends JFrame {
     }
 
     /**
-     * Background DLX solver
+     * Background solver
      */
     private class SolverWorker extends SwingWorker<int[][], Void> {
         private final int rows, cols;
@@ -258,7 +275,8 @@ public class PolyominoApp extends JFrame {
 
         @Override
         protected int[][] doInBackground() {
-            return PolyominoSolver.solve(new int[rows][cols], shapes);
+//            return PolyominoSolver.solve(new int[rows][cols], shapes);// <-- too slow!
+            return DLXPolyominoSolver.solve(new int[rows][cols], shapes);
         }
 
         @Override
@@ -387,160 +405,56 @@ public class PolyominoApp extends JFrame {
         }
     }
 
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new PolyominoApp().setVisible(true));
-    }
-}
+	private static boolean dLXPolyominoSolver(int rows) {//benchmarking adapter for DLXPolyominoSolver
+        final List<boolean[][]> selectedShapes = new ArrayList<>();
+		final Polyomino[] testPolyominoes = {T4, S4, F5, L5, N5, P5, T5, U5, V5, W5, X5, Y5, Z5};
+        for (Polyomino polyomino: testPolyominoes)
+			selectedShapes.add(polyomino.shape);
+		int cols = rows;
+		return DLXPolyominoSolver.solve(new int[rows][cols], selectedShapes) != null;
+	}
 
-/**
- * Polyominoes Solver based on Donald Knuth's Dancing Links (DLX) algorithm
- */
-class PolyominoSolver {
-    public static int[][] solve(int[][] board, List<boolean[][]> polyominoTypes) {
-        int rows = board.length, cols = board[0].length;
-        int totalCells = rows * cols;
-        final List<Placement> allPlacements = new ArrayList<>();
+	private static boolean polyominoSolver(int rows) {//benchmarking adapter for PolyominoSolver
+        final List<boolean[][]> selectedShapes = new ArrayList<>();
+		final Polyomino[] testPolyominoes = {T4, S4, F5, L5, N5, P5, T5, U5, V5, W5, X5, Y5, Z5};
+        for (Polyomino polyomino: testPolyominoes)
+			selectedShapes.add(polyomino.shape);
+		int cols = rows;
+		return PolyominoSolver.solve(new int[rows][cols], selectedShapes) != null;
+	}
 
-        for (int i = 0; i < polyominoTypes.size(); i++) {
-            List<boolean[][]> orientations = getUniqueOrientations(polyominoTypes.get(i));
-            for (boolean[][] shape: orientations) {
-                for (int r = 0; r <= rows - shape.length; r++) {
-                    for (int c = 0; c <= cols - shape[0].length; c++) {
-                        List<Integer> cells = new ArrayList<>();
-                        for (int dr = 0; dr < shape.length; dr++) {
-                            for (int dc = 0; dc < shape[0].length; dc++) {
-                                if (shape[dr][dc]) cells.add((r + dr) * cols + (c + dc));
-                            }
-                        }
-                        allPlacements.add(new Placement(cells));
-                    }
-                }
-            }
-        }
-
-        DLX solver = new DLX(totalCells);
-        for (int i = 0; i < allPlacements.size(); i++) 
-			solver.addRow(i, allPlacements.get(i).cells);
-        final List<Integer> solution = solver.solve();
-        if (solution == null) return null;
-
-        final int[][] res = new int[rows][cols];
-        int order = 1;
-        for (int idx: solution) {
-            for (int cell: allPlacements.get(idx).cells)
-				res[cell / cols][cell % cols] = order;
-            order++;
-        }
-        return res;
-    }
-
-    private static class Placement {
-        final List<Integer> cells;
-        Placement(List<Integer> c) { 
-			this.cells = c; 
+	private final static int REPEAT_COUNT = 1;
+	private static void doBenchmark(Function<Integer, Boolean> solver) {
+		long t0 = System.nanoTime(); long total = 0;
+		long max = 0; int n_runs = 0;
+		for (int k = 0; k < REPEAT_COUNT; k++) {
+			for (int rows = 4; rows < 12; rows += 2) {
+	            if (solver.apply(rows)) {
+					n_runs++;
+					long t = System.nanoTime();
+					long delta = t - t0;
+					t0 = t; total += delta;
+					if (delta > max) {
+						max = delta;
+					}
+					if (n_runs % REPEAT_COUNT == 0)
+						System.out.print(".");
+				}
+			}
 		}
-    }
+		System.out.println();
+		System.out.println("Average solver time: " + total / 1e6 / n_runs + " ms");
+		System.out.println("Max solver time: " + max / 1e6 + " ms");
+	}
 
-    private static List<boolean[][]> getUniqueOrientations(boolean[][] shape) {
-        final List<boolean[][]> shapes = new ArrayList<>();
-        boolean[][] temp = shape;
-        for (int i = 0; i < 4; i++) {
-			if (!containsShape(shapes, temp))
-				shapes.add(temp);
-			if (!containsShape(shapes, flipShape(temp)))
-				shapes.add(temp);
-            temp = rotateShape(temp);
-        }
-        return shapes;
-    }
-
-    private static boolean containsShape(List<boolean[][]> shapes, boolean[][] refShape) {
-		for (boolean[][] shape: shapes)
-			if (Arrays.deepEquals(shape, refShape))
-				return true;
-		return false;
-    }
-
-    private static boolean[][] rotateShape(boolean[][] shape) {
-        int r = shape.length, c = shape[0].length;
-        boolean[][] out = new boolean[c][r];
-        for (int i = 0; i < r; i++) 
-			for (int j = 0; j < c; j++) 
-				out[j][r - 1 - i] = shape[i][j];
-        return out;
-    }
-
-    private static boolean[][] flipShape(boolean[][] shape) {
-        int r = shape.length, c = shape[0].length;
-        boolean[][] out = new boolean[r][c];
-        for (int i = 0; i < r; i++) 
-			for (int j = 0; j < c; j++) 
-				out[i][c - 1 - j] = shape[i][j];
-        return out;
-    }
-
-    static class DLX {
-        class Node { Node L, R, U, D; ColumnNode C; int r; Node() { L = R = U = D = this; } }
-        class ColumnNode extends Node { int s, i; ColumnNode(int idx) { super(); i = idx; s = 0; C = this; } }
-        private final ColumnNode root = new ColumnNode(-1);
-        private final List<ColumnNode> columnNodes = new ArrayList<>();
-        private List<Integer> solution;
-
-        DLX(int n) {
-            ColumnNode last = root;
-            for (int i = 0; i < n; i++) {
-                ColumnNode c = new ColumnNode(i);
-                c.L = last; c.R = root; last.R = c; root.L = c;
-                columnNodes.add(c); last = c;
-            }
-        }
-
-        void addRow(int rIdx, List<Integer> cells) {
-            Node first = null;
-            for (int ci: cells) {
-                ColumnNode c = columnNodes.get(ci);
-                Node n = new Node(); n.r = rIdx; n.C = c; n.U = c.U; n.D = c;
-                c.U.D = n; c.U = n; c.s++;
-                if (first == null) first = n;
-                else { n.L = first.L; n.R = first; first.L.R = n; first.L = n; }
-            }
-        }
-
-        List<Integer> solve() { solution = new ArrayList<>(); return search() ? solution : null; }
-
-        private boolean search() {
-            if (Thread.currentThread().isInterrupted()) return false;
-
-            if (root.R == root) return true;
-
-			ColumnNode c = (ColumnNode) root.R;
-            for (ColumnNode t = (ColumnNode) root.R; t != root; t = (ColumnNode) t.R)
-				if ((t).s < c.s) c = t;
-            if (c.s == 0) return false;
-            cover(c);
-            for (Node r = c.D; r != c; r = r.D) {
-                solution.add(r.r);
-                for (Node j = r.R; j != r; j = j.R) 
-					cover(j.C);
-                if (search()) return true;
-                for (Node j = r.L; j != r; j = j.L) 
-					uncover(j.C);
-                solution.remove(solution.size() - 1);
-            }
-            uncover(c);
-            return false;
-        }
-
-        private void cover(ColumnNode c) {
-            c.R.L = c.L; c.L.R = c.R;
-            for (Node i = c.D; i != c; i = i.D)
-                for (Node j = i.R; j != i; j = j.R) { j.D.U = j.U; j.U.D = j.D; j.C.s--; }
-        }
-
-        private void uncover(ColumnNode c) {
-            for (Node i = c.U; i != c; i = i.U)
-                for (Node j = i.L; j != i; j = j.L) { j.C.s++; j.D.U = j; j.U.D = j; }
-            c.R.L = c; c.L.R = c;
-        }
+    public static void main(String[] args) {
+		if (args.length > 0 && args[0].equals("-benchmark")) {
+			System.out.println("Benchmarking DLXPolyominoSolver.solve()");
+			doBenchmark(PolyominoApp::dLXPolyominoSolver);
+			System.out.println("----------------------");
+			System.out.println("Benchmarking PolyominoSolver.solve()");
+			doBenchmark(PolyominoApp::polyominoSolver);
+			System.out.println("----------------------");
+		} else SwingUtilities.invokeLater(() -> new PolyominoApp().setVisible(true));
     }
 }

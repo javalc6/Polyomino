@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="Maze" default="run" basedir=".">
+<project name="ExactCover" default="run" basedir=".">
 
     <property name="src.dir" value="src"/>
     <property name="build.dir" value="classes"/>
@@ -24,4 +24,14 @@
             </classpath>
         </java>
     </target>
+
+    <target name="benchmark" depends="compile">
+        <java classname="PolyominoApp" fork="true">
+			<arg value="-benchmark"/>
+            <classpath>
+                <pathelement path="${build.dir}"/>
+            </classpath>
+        </java>
+    </target>
+
 </project>
