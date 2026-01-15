@@ -32,7 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 import solver.DLXPolyominoSolver;
 import solver.PolyominoSolver;
@@ -275,7 +275,7 @@ public class PolyominoApp extends JFrame {
 
         @Override
         protected int[][] doInBackground() {
-//            return PolyominoSolver.solve(new int[rows][cols], shapes);// <-- too slow!
+//            return PolyominoSolver.solve(new int[rows][cols], shapes);// slower
             return DLXPolyominoSolver.solve(new int[rows][cols], shapes);
         }
 
@@ -405,40 +405,40 @@ public class PolyominoApp extends JFrame {
         }
     }
 
-	private static boolean dLXPolyominoSolver(int rows) {//benchmarking adapter for DLXPolyominoSolver
+	private static boolean dLXPolyominoSolver(int rows, int cols) {//benchmarking adapter for DLXPolyominoSolver
         final List<boolean[][]> selectedShapes = new ArrayList<>();
 		final Polyomino[] testPolyominoes = {T4, S4, F5, L5, N5, P5, T5, U5, V5, W5, X5, Y5, Z5};
         for (Polyomino polyomino: testPolyominoes)
 			selectedShapes.add(polyomino.shape);
-		int cols = rows;
 		return DLXPolyominoSolver.solve(new int[rows][cols], selectedShapes) != null;
 	}
 
-	private static boolean polyominoSolver(int rows) {//benchmarking adapter for PolyominoSolver
+	private static boolean polyominoSolver(int rows, int cols) {//benchmarking adapter for PolyominoSolver
         final List<boolean[][]> selectedShapes = new ArrayList<>();
 		final Polyomino[] testPolyominoes = {T4, S4, F5, L5, N5, P5, T5, U5, V5, W5, X5, Y5, Z5};
         for (Polyomino polyomino: testPolyominoes)
 			selectedShapes.add(polyomino.shape);
-		int cols = rows;
 		return PolyominoSolver.solve(new int[rows][cols], selectedShapes) != null;
 	}
 
-	private final static int REPEAT_COUNT = 1;
-	private static void doBenchmark(Function<Integer, Boolean> solver) {
+	private final static int REPEAT_COUNT = 10;
+	private static void doBenchmark(BiFunction<Integer, Integer, Boolean> solver) {
 		long t0 = System.nanoTime(); long total = 0;
 		long max = 0; int n_runs = 0;
 		for (int k = 0; k < REPEAT_COUNT; k++) {
-			for (int rows = 4; rows < 12; rows += 2) {
-	            if (solver.apply(rows)) {
-					n_runs++;
-					long t = System.nanoTime();
-					long delta = t - t0;
-					t0 = t; total += delta;
-					if (delta > max) {
-						max = delta;
+			for (int rows = 4; rows < 16; rows += 2) {
+				for (int cols = 4; cols < 16; cols += 2) {
+					if (solver.apply(rows, cols)) {
+						n_runs++;
+						long t = System.nanoTime();
+						long delta = t - t0;
+						t0 = t; total += delta;
+						if (delta > max) {
+							max = delta;
+						}
+						if (n_runs % REPEAT_COUNT == 0)
+							System.out.print(".");
 					}
-					if (n_runs % REPEAT_COUNT == 0)
-						System.out.print(".");
 				}
 			}
 		}

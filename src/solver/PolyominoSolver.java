@@ -2,7 +2,7 @@ package solver;
 
 import java.util.*;
 /**
- * Polyominoes Solver based on recursion, pruning impossible holes early
+ * Polyominoes Solver based on recursion: try "harder" pieces before and prune impossible holes early
  */
 public class PolyominoSolver extends AbstractPolyominoSolver {
 
@@ -13,8 +13,25 @@ public class PolyominoSolver extends AbstractPolyominoSolver {
 				if (cell > 0) n_filled++;
 
 		final List<boolean[][]> allOrientations = new ArrayList<>();
-        for (int i = 0; i < polyominoTypes.size(); i++)
-			allOrientations.addAll(getUniqueOrientations(polyominoTypes.get(i)));
+		for (int i = 0; i < polyominoTypes.size(); i++) {
+            List<boolean[][]> orientations = getUniqueOrientations(polyominoTypes.get(i));
+            for (boolean[][] shape: orientations)
+				if (!containsShape(allOrientations, shape))
+					allOrientations.add(shape);
+        }
+
+		// Sort orientations to try "harder" pieces before
+		allOrientations.sort((a, b) -> {
+			// Check for piece with higher size
+			int s1 = getPieceSize(a);
+			int s2 = getPieceSize(b);
+			if (s1 != s2) return s2 - s1;
+
+			// Check for piece with higher bounding box area
+			int area1 = a.length * a[0].length;
+			int area2 = b.length * b[0].length;
+			return area2 - area1;
+		});
 
 		// Find the smallest piece size to prune impossible holes early
 		int minPieceSize = Integer.MAX_VALUE;
@@ -25,33 +42,31 @@ public class PolyominoSolver extends AbstractPolyominoSolver {
 					if (c) size++;
 			minPieceSize = Math.min(minPieceSize, size);
 		}
-		return solve(board, board[0].length, board.length, 0, 0, n_filled, 1, allOrientations, minPieceSize) ? board : null;
+		return solve(board, board[0].length, board.length, n_filled, 1, allOrientations, minPieceSize) ? board : null;
 	}
 
-	private static boolean solve(int[][] board, int cols, int rows, int ii, int jj, int n_filled, int ord, List<boolean[][]> allOrientations, int minPieceSize) {
-		if (!canFillHole(board, cols, rows, minPieceSize)) return false;
-		int j = jj;
-		for (int i = ii; i < rows; i++) {
-			for (; j < cols; j++) {
-				if (board[i][j] != 0) continue;
+	private static boolean solve(int[][] board, int cols, int rows, int n_filled, int ord, List<boolean[][]> allOrientations, int minPieceSize) {
+		for (int i = 0; i < rows; i++) {
+			for (int j = 0; j < cols; j++) {
+				if (board[i][j] == 0) {
+					if (!canFillHole(board, cols, rows, minPieceSize)) return false;
 
-				for (boolean[][] shape: allOrientations) {
-					if (j + shape[0].length <= cols && i + shape.length <= rows) {
-						if (!shape[0][0]) continue; // Pruning: avoids leaving holes behind
-
-						if (isAreaFree(board, shape, i, j)) {
-							placePiece(board, shape, i, j, ord);//take area
-							int new_n_filled = n_filled + getPieceSize(shape);
-							if ((new_n_filled == cols * rows) || 
-								solve(board, cols, rows, i, j + 1, new_n_filled, ord + 1, allOrientations, minPieceSize))
-								return true;
-							placePiece(board, shape, i, j, 0);//backtrack
+					for (boolean[][] shape : allOrientations) {
+						for (int dr = 0; dr < shape.length; dr++) {
+							for (int dc = 0; dc < shape[0].length; dc++) {
+								if (shape[dr][dc] && canPlace(board, cols, rows, shape, i - dr, j - dc)) {
+									placePiece(board, shape, i - dr, j - dc, ord);//take area
+									int new_n_filled = n_filled + getPieceSize(shape);
+									if (new_n_filled == rows * cols || solve(board, cols, rows, new_n_filled, ord + 1, allOrientations, minPieceSize))
+										return true;
+									placePiece(board, shape, i - dr, j - dc, 0); //backtrack
+								}
+							}
 						}
 					}
+					return false;
 				}
-				return false; 
 			}
-			j = 0;
 		}
 		return false;
 	}
@@ -86,10 +101,10 @@ public class PolyominoSolver extends AbstractPolyominoSolver {
 		return count;
 	}
 
-	private static boolean isAreaFree(int[][] board, boolean[][] shape, int r, int c) {
+	private static boolean canPlace(int[][] board, int cols, int rows, boolean[][] shape, int r, int c) {
 		for (int dr = 0; dr < shape.length; dr++) {
 			for (int dc = 0; dc < shape[0].length; dc++)
-				if (shape[dr][dc] && board[r + dr][c + dc] > 0) 
+				if (shape[dr][dc] && (r + dr < 0 || r + dr >= rows || c + dc < 0 || c + dc >= cols || board[r + dr][c + dc] != 0))
 					return false;
 		}
 		return true;
