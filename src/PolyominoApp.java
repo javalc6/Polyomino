@@ -275,8 +275,15 @@ public class PolyominoApp extends JFrame {
 
         @Override
         protected int[][] doInBackground() {
-//            return PolyominoSolver.solve(new int[rows][cols], shapes);// slower
-            return DLXPolyominoSolver.solve(new int[rows][cols], shapes);
+			int[][] board = new int[rows][cols];
+/*take corners
+			board[0][0] = 1;
+			board[0][board[0].length - 1] = 1;
+			board[board.length - 1][0] = 1;
+			board[board.length - 1][board[0].length - 1] = 1;
+*/
+//            return PolyominoSolver.solve(board, shapes) ? board : null;// slower
+            return DLXPolyominoSolver.solve(board, shapes) ? board : null;
         }
 
         @Override
@@ -410,7 +417,7 @@ public class PolyominoApp extends JFrame {
 		final Polyomino[] testPolyominoes = {T4, S4, F5, L5, N5, P5, T5, U5, V5, W5, X5, Y5, Z5};
         for (Polyomino polyomino: testPolyominoes)
 			selectedShapes.add(polyomino.shape);
-		return DLXPolyominoSolver.solve(new int[rows][cols], selectedShapes) != null;
+		return DLXPolyominoSolver.solve(new int[rows][cols], selectedShapes);
 	}
 
 	private static boolean polyominoSolver(int rows, int cols) {//benchmarking adapter for PolyominoSolver
@@ -418,7 +425,7 @@ public class PolyominoApp extends JFrame {
 		final Polyomino[] testPolyominoes = {T4, S4, F5, L5, N5, P5, T5, U5, V5, W5, X5, Y5, Z5};
         for (Polyomino polyomino: testPolyominoes)
 			selectedShapes.add(polyomino.shape);
-		return PolyominoSolver.solve(new int[rows][cols], selectedShapes) != null;
+		return PolyominoSolver.solve(new int[rows][cols], selectedShapes);
 	}
 
 	private final static int REPEAT_COUNT = 10;

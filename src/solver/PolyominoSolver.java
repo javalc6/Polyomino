@@ -6,11 +6,14 @@ import java.util.*;
  */
 public class PolyominoSolver extends AbstractPolyominoSolver {
 
-	public static int[][] solve(int[][] board, List<boolean[][]> polyominoTypes) {
+	public static boolean solve(int[][] board, List<boolean[][]> polyominoTypes) {
 		int n_filled = 0;
+		int order = 1;
 		for (int[] row: board) 
-			for (int cell: row) 
+			for (int cell: row) {
 				if (cell > 0) n_filled++;
+				if (cell >= order) order = cell + 1;
+			}
 
 		final List<boolean[][]> allOrientations = new ArrayList<>();
 		for (int i = 0; i < polyominoTypes.size(); i++) {
@@ -42,7 +45,7 @@ public class PolyominoSolver extends AbstractPolyominoSolver {
 					if (c) size++;
 			minPieceSize = Math.min(minPieceSize, size);
 		}
-		return solve(board, board[0].length, board.length, n_filled, 1, allOrientations, minPieceSize) ? board : null;
+		return solve(board, board[0].length, board.length, n_filled, order, allOrientations, minPieceSize);
 	}
 
 	private static boolean solve(int[][] board, int cols, int rows, int n_filled, int ord, List<boolean[][]> allOrientations, int minPieceSize) {
